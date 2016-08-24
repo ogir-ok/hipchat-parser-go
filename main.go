@@ -1,9 +1,7 @@
 package main
 
-
 import (
     "fmt"
-    "sync"
     "regexp"
     "net/url"
     "encoding/json"
@@ -13,58 +11,57 @@ import (
     "packages/url_title"
 )
 
-const mention_regex string = "\\B@(?P<value>\\w+)"
-const emoticon_regex string = "\\((?P<value>\\w{1,15})\\)"
+const mentionRegex string = "\\B@(?P<mention>\\w+)"
+const emoticonRegex string = "\\((?P<emoticon>\\w{1,15})\\)"
 
-const fetch_timeout int = 1
+const fetchTimeout int = 1
 
-type link struct {
+
+type Link struct {
     url string
     title string
 }
 
-func (s *link) MarshalJSON() ([]byte, error) {
+func (s *Link) MarshalJSON() ([]byte, error) {
     return []byte(fmt.Sprintf(`{"url":"%s","title":"%s"}`, s.url, s.title)), nil
 }
 
+// Finds links in text and gives slice of Link struct objects
+func parseLinks(message string) []Link {
+    linksChain := make(chan Link)
 
+    matchedURLs := xurls.Relaxed.FindAllString(message, -1)
 
-func parse_links(message string) interface{} {
-    links_chain := make(chan link)
-    var wg sync.WaitGroup
-
-    matched_urls := xurls.Relaxed.FindAllString(message, -1)
-
-    for _, matched_url := range matched_urls {
-        parsed_url, _ := url.Parse(matched_url)
-        if parsed_url.Scheme == "" {
-            parsed_url.Scheme = "http"
+    for _, matchedURL := range matchedURLs {
+        parsedURL, _ := url.Parse(matchedURL)
+        if parsedURL.Scheme == "" {
+            parsedURL.Scheme = "http"
         }
-        formated_url := parsed_url.String()
+        formatedURL := parsedURL.String()
 
-        wg.Add(1)
+        // Async fetch of titles in urls
         go func() {
-            defer wg.Done()
-            lnk := link{formated_url, ""}
-            title, ok := url_title.GetURLTitle(formated_url, fetch_timeout)
+            link := Link{formatedURL, ""}
+            title, ok := url_title.GetURLTitle(formatedURL, fetchTimeout)
             if ok {
-                lnk.title = title
+                link.title = title
             }
-            links_chain <- lnk
+            linksChain <- link
         }()
     }
 
-    links := make([]link, 0)
+    links := make([]Link, 0)
 
-    for i:=0; i < len(matched_urls); i++ {
-        link := <-links_chain
+    for i:=0; i < len(matchedURLs); i++ {
+        link := <-linksChain
         links = append(links, link)
     }
 
     return links
 }
 
-func parse_regexp(message string,regex string) []string {
+// Parses message for given regex. Regex should have submatch
+func parseRegexp(message string,regex string) []string {
     r := regexp.MustCompile(regex)
     res := make([]string, 0)
     matches := r.FindAllStringSubmatch(message, -1)
@@ -74,24 +71,48 @@ func parse_regexp(message string,regex string) []string {
     return res
 }
 
-func parse_message(message string) {
+
+// Parses message. Returns json with links, emoticons, mentions
+func ParseMessage(message string) string {
     res := make(map[string]interface{})
-    res["links"] = parse_links(message)
-    res["mentions"] = parse_regexp(message, mention_regex)
-    res["emoticons"] = parse_regexp(message, emoticon_regex)
-    res_json, _ := json.Marshal(res)
-    fmt.Println(string(res_json))
+    links := parseLinks(message)
+    mentions := parseRegexp(message, mentionRegex)
+    emoticons := parseRegexp(message, emoticonRegex)
+
+    if len(links) > 0 {
+        res["links"] = links
+    }
+
+    if len(emoticons) > 0 {
+        res["emoticons"] = emoticons
+    }
+
+    if len(mentions) > 0 {
+        res["mentions"] = mentions
+    }
+
+    resJson, _ := json.Marshal(res)
+    return string(resJson)
 }
 
 
 func main() {
-    parse_message(`Hello world,
-    @sarah @jane @parker
-    yahoo.com
-    http://abbac.co
-    http://google.com
-    http://i.beleive.does.not.exist.co
-    google.com vk.com
-    (test) (tes) (ttt)
-    `)
+    messages := []string{
+        "(aaa) (bbb) @sss",
+        "http://vk.com",
+        "(toolongtobeemoticon) @mention",
+        `Hello world,
+        @sarah @jane @parker
+        yahoo.com
+        http://google.com
+        http://i.beleive.does.not.exist.co
+        google.com vk.com
+        (test) (tes) (ttt)
+        `,}
+
+    for _, message := range messages {
+        fmt.Println("Parsing: ", message)
+        res := ParseMessage(message)
+        fmt.Println(res)
+    }
 }
