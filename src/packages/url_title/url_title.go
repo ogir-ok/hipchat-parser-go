@@ -3,7 +3,6 @@ package url_title
 
 import (
     "io"
-    "time"
     "net/http"
     "golang.org/x/net/html"
 )
@@ -38,13 +37,8 @@ func getHtmlTitle(r io.Reader) (string, bool) {
     return traverse(doc)
 }
 
-func GetURLTitle(url string, timeout_seconds int) (string, bool) {
-    timeout := time.Duration(1 * time.Second)
-    client := http.Client{
-        Timeout: timeout,
-    }
-
-    client.Get(url)
+func GetURLTitle(url string) (string, bool) {
+    http.Get(url)
     res, err := http.Get(url)
     if err == nil {
         defer res.Body.Close()

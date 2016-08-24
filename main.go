@@ -2,6 +2,8 @@ package main
 
 import (
     "fmt"
+    "log"
+    "time"
     "regexp"
     "net/url"
     "encoding/json"
@@ -14,7 +16,8 @@ import (
 const mentionRegex string = "\\B@(?P<mention>\\w+)"
 const emoticonRegex string = "\\((?P<emoticon>\\w{1,15})\\)"
 
-const fetchTimeout int = 1
+// Timeout to fetch title of link in message
+const fetchTimeout time.Duration = time.Duration(2) * time.Second
 
 
 type Link struct {
@@ -39,13 +42,23 @@ func parseLinks(message string) []Link {
         }
         formatedURL := parsedURL.String()
 
-        // Async fetch of titles in urls
+        // Async fetch of titles in urls (all at the same time)
         go func() {
             link := Link{formatedURL, ""}
-            title, ok := url_title.GetURLTitle(formatedURL, fetchTimeout)
-            if ok {
+
+            titleChan := make(chan string, 1)
+            go func() {
+                title, _ := url_title.GetURLTitle(formatedURL)
+                titleChan <- title
+            }()
+
+            select {
+            case title := <- titleChan:
                 link.title = title
+            case <-time.After(fetchTimeout):
+                log.Print("Timeout fetch for url ", formatedURL)
             }
+
             linksChain <- link
         }()
     }
@@ -106,6 +119,8 @@ func main() {
         yahoo.com
         http://google.com
         http://i.beleive.does.not.exist.co
+        http://eloquentjavascript.net/Eloquent_JavaScript.pdf
+        http://www.axmag.com/download/pdfurl-guide.pdf
         google.com vk.com
         (test) (tes) (ttt)
         `,}
