@@ -1,10 +1,12 @@
 package main
 
 import (
+    "os"
     "fmt"
     "log"
     "time"
     "regexp"
+    "strings"
     "net/url"
     "encoding/json"
 
@@ -44,7 +46,7 @@ func parseLinks(message string) []Link {
 
         // Async fetch of titles in urls (all at the same time)
         go func() {
-            link := Link{formatedURL, ""}
+            link := Link{matchedURL, ""}
 
             titleChan := make(chan string, 1)
             go func() {
@@ -110,24 +112,8 @@ func ParseMessage(message string) string {
 
 
 func main() {
-    messages := []string{
-        "(aaa) (bbb) @sss",
-        "http://vk.com",
-        "(toolongtobeemoticon) @mention",
-        `Hello world,
-        @sarah @jane @parker
-        yahoo.com
-        http://google.com
-        http://i.beleive.does.not.exist.co
-        http://eloquentjavascript.net/Eloquent_JavaScript.pdf
-        http://www.axmag.com/download/pdfurl-guide.pdf
-        google.com vk.com
-        (test) (tes) (ttt)
-        `,}
-
-    for _, message := range messages {
-        fmt.Println("Parsing: ", message)
-        res := ParseMessage(message)
-        fmt.Println(res)
-    }
+    message := strings.Join(os.Args[1:], " ")
+    fmt.Println("Parsing: ", message)
+    res := ParseMessage(message)
+    fmt.Println(res)
 }
